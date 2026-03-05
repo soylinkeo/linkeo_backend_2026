@@ -11,6 +11,17 @@ const LinkSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// ✅ NUEVO: schema para enlaces personalizados
+const CustomLinkSchema = new mongoose.Schema(
+  {
+    id:      { type: String, required: true },
+    name:    { type: String, default: "" },
+    url:     { type: String, default: "" },
+    visible: { type: Boolean, default: true },
+  },
+  { _id: false }
+);
+
 const ThemeSchema = new mongoose.Schema(
   {
     title: { type: String, default: "" },
@@ -73,22 +84,15 @@ const ThemeSchema = new mongoose.Schema(
 
 const ProfileSchema = new mongoose.Schema(
   {
-    // relación 1–a–1 con User
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true, index: true },
-
-    // OJO: si quieres permitir “repetidos” aquí, NO uses unique
     username: { type: String, required: true, index: true },
-
-    // ✅ identificador público único
     slug: { type: String, required: true, unique: true, index: true },
-
     displayName: { type: String, default: "" },
     bio: { type: String, default: "" },
-
     theme: { type: ThemeSchema, default: () => ({}) },
     links: { type: [LinkSchema], default: [] },
-
-    // guardas extra (nfcDesignerDualV1, etc.)
+    // ✅ NUEVO: enlaces personalizados del usuario
+    customLinks: { type: [CustomLinkSchema], default: [] },
     meta: { type: Map, of: mongoose.Schema.Types.Mixed },
   },
   { timestamps: true }

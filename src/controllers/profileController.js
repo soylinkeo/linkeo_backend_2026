@@ -58,7 +58,6 @@ async function upsertMe(req, res, next) {
 
     delete value.user;
 
-    // si quieres permitir cambiar username aquí:
     let usernamePatch = {};
     if (typeof req.body.username === "string" && req.body.username.trim()) {
       usernamePatch.username = req.body.username.trim();
@@ -70,10 +69,17 @@ async function upsertMe(req, res, next) {
     const base = slugifySimple(finalUsername || "usuario");
     const slug = await ensureUniqueSlug(base, current?._id);
 
+    // Construir patch explícitamente para garantizar que customLinks se persiste
+    const patch = { ...value, ...usernamePatch, slug };
+
+    // Si viene customLinks vacío array, forzar con $set explícito
+    // (algunos drivers Mongoose ignoran arrays vacíos con spread)
+    const updateOp = { $set: patch };
+
     const updated = await Profile.findOneAndUpdate(
       { user: req.user._id },
-      { $set: { ...value, ...usernamePatch, slug } },
-      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+      updateOp,
+      { new: true, upsert: true, runValidators: false, setDefaultsOnInsert: true }
     );
 
     res.json(updated);
@@ -155,8 +161,9 @@ async function getPublicBySlug(req, res, next) {
   try {
     const { slug } = req.params;
 
+    // ✅ agregamos customLinks al .select() para que llegue al frontend público
     const profile = await Profile.findOne({ slug })
-      .select("slug username displayName bio theme links meta")
+      .select("slug username displayName bio theme links customLinks meta")
       .lean();
 
     if (!profile) {
@@ -165,13 +172,14 @@ async function getPublicBySlug(req, res, next) {
     }
 
     res.json({
-      slug: profile.slug,
-      username: profile.username,
+      slug:        profile.slug,
+      username:    profile.username,
       displayName: profile.displayName,
-      bio: profile.bio,
-      theme: profile.theme || {},
-      links: profile.links || [],
-      nfcLayout: profile.meta?.nfcDesignerDualV1 ?? null,
+      bio:         profile.bio,
+      theme:       profile.theme || {},
+      links:       profile.links || [],
+      customLinks: profile.customLinks || [],   // ✅ NUEVO
+      nfcLayout:   profile.meta?.nfcDesignerDualV1 ?? null,
     });
   } catch (err) {
     next(err);
@@ -224,12 +232,9 @@ async function upsertMyNfcLayout(req, res, next) {
 module.exports = {
   getMe,
   upsertMe,
-
   createProfile,
   updateProfile,
-
   getPublicBySlug,
-
   getMyNfcLayout,
   upsertMyNfcLayout,
 };

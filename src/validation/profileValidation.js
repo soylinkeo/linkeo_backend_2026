@@ -8,6 +8,14 @@ const linkSchema = Joi.object({
   order: Joi.number().integer().min(0).default(0),
 });
 
+// ✅ NUEVO: validación para cada enlace personalizado
+const customLinkSchema = Joi.object({
+  id:      Joi.string().trim().required(),
+  name:    Joi.string().trim().allow("").default(""),
+  url:     Joi.string().trim().allow("").default(""),
+  visible: Joi.boolean().default(true),
+});
+
 const themeSchema = Joi.object({
   title: Joi.string().allow(""),
   description: Joi.string().allow(""),
@@ -63,6 +71,8 @@ const themeSchema = Joi.object({
   contactPostalCode: Joi.string().allow(""),
   contactCountry: Joi.string().allow(""),
   contactNote: Joi.string().allow(""),
+  // customLinks must NOT be inside theme - it's a top-level field
+  customLinks: Joi.any().strip(),
 }).unknown(true);
 
 const createSchema = Joi.object({
@@ -71,6 +81,8 @@ const createSchema = Joi.object({
   bio: Joi.string().trim().allow(""),
   theme: themeSchema.default({}),
   links: Joi.array().items(linkSchema).default([]),
+  // ✅ NUEVO
+  customLinks: Joi.array().items(customLinkSchema).default([]),
   meta: Joi.object().unknown(true),
 });
 
@@ -79,6 +91,8 @@ const updateSchema = Joi.object({
   bio: Joi.string().trim().allow(""),
   theme: themeSchema,
   links: Joi.array().items(linkSchema),
+  // ✅ NUEVO
+  customLinks: Joi.array().items(customLinkSchema),
   meta: Joi.object().unknown(true),
 }).min(1);
 
