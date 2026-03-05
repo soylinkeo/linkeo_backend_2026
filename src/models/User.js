@@ -8,6 +8,11 @@ const UserSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     roles: { type: [String], default: ["user"] },
     refreshWhitelist: { type: [String], default: [] },
+    status: { 
+  type: String, 
+  enum: ["pending", "active", "blocked"], 
+  default: "pending" 
+},
 
     // relación 1–a–1 con Profile
     profile: { type: mongoose.Schema.Types.ObjectId, ref: "Profile", unique: true, sparse: true },

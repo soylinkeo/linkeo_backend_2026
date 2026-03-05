@@ -13,20 +13,18 @@ function slugifySimple(str) {
     .toLowerCase()
     .trim()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // quita acentos
-    .replace(/[^a-z0-9\s-]/g, "") // deja letras/números/espacio/-
-    .replace(/\s+/g, "-") // espacios -> -
-    .replace(/-+/g, "-"); // --- -> -
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
 }
 
 async function ensureUniqueSlug(base) {
   let slug = base || "usuario";
   let n = 1;
-
   while (true) {
     const exists = await Profile.exists({ slug });
     if (!exists) return slug;
-
     n += 1;
     slug = `${base}-${n}`;
   }
@@ -38,12 +36,15 @@ function signTokens(user) {
     JWT_SECRET,
     { expiresIn: "15m" }
   );
-
-  const refreshToken = jwt.sign({ sub: user._id }, JWT_REFRESH_SECRET, { expiresIn: "30d" });
-
+  const refreshToken = jwt.sign(
+    { sub: user._id },
+    JWT_REFRESH_SECRET,
+    { expiresIn: "30d" }
+  );
   return { accessToken, refreshToken };
 }
 
+/* ====== REGISTER ====== */
 async function register(req, res, next) {
   try {
     const { username, email, password } = req.body || {};
@@ -59,9 +60,17 @@ async function register(req, res, next) {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await User.create({ username, email, passwordHash, roles: ["user"] });
 
-    // ✅ Genera slug único para el profile público
+    // ✅ status: "pending" — no puede entrar hasta que admin apruebe
+    const user = await User.create({
+      username,
+      email,
+      passwordHash,
+      roles: ["user"],
+      status: "pending",
+    });
+
+    // Genera slug único para el profile público
     const base = slugifySimple(username);
     const slug = await ensureUniqueSlug(base);
 
@@ -79,23 +88,20 @@ async function register(req, res, next) {
     user.profile = profile._id;
     await user.save();
 
-    const { accessToken, refreshToken } = signTokens(user);
-    await User.findByIdAndUpdate(user._id, { $addToSet: { refreshWhitelist: refreshToken } });
-
+    // ✅ No devuelve tokens — el usuario debe esperar aprobación
     res.status(201).json({
-      user: { _id: user._id, username: user.username, email: user.email, profile: profile._id },
-      profile,
-      accessToken,
-      refreshToken,
+      message: "Cuenta creada exitosamente. Tu acceso está pendiente de aprobación por el administrador.",
+      pending: true,
     });
   } catch (err) {
     next(err);
   }
 }
 
+/* ====== LOGIN ====== */
 async function login(req, res, next) {
   try {
-    const { user, pass } = req.body || {}; // frontend envía { user, pass }
+    const { user, pass } = req.body || {};
     if (!user || !pass) {
       res.status(400);
       throw new Error("user y pass requeridos");
@@ -116,6 +122,16 @@ async function login(req, res, next) {
       throw new Error("Credenciales inválidas");
     }
 
+    // ✅ Bloquea según status
+    if (found.status === "pending") {
+      res.status(403);
+      throw new Error("Tu cuenta está pendiente de aprobación. Te avisaremos cuando tengas acceso.");
+    }
+    if (found.status === "blocked") {
+      res.status(403);
+      throw new Error("Tu cuenta ha sido bloqueada. Contacta al administrador.");
+    }
+
     const { accessToken, refreshToken } = signTokens(found);
     await User.findByIdAndUpdate(found._id, { $addToSet: { refreshWhitelist: refreshToken } });
 
@@ -130,6 +146,7 @@ async function login(req, res, next) {
   }
 }
 
+/* ====== REFRESH ====== */
 async function refresh(req, res, next) {
   try {
     const { refreshToken } = req.body || {};
@@ -151,6 +168,16 @@ async function refresh(req, res, next) {
       throw new Error("Refresh revocado");
     }
 
+    // ✅ También verifica status en refresh
+    if (user.status === "pending") {
+      res.status(403);
+      throw new Error("Cuenta pendiente de aprobación");
+    }
+    if (user.status === "blocked") {
+      res.status(403);
+      throw new Error("Cuenta bloqueada");
+    }
+
     const tokens = signTokens(user);
     res.json(tokens);
   } catch (err) {
@@ -158,6 +185,7 @@ async function refresh(req, res, next) {
   }
 }
 
+/* ====== LOGOUT ====== */
 async function logout(req, res, next) {
   try {
     const { refreshToken } = req.body || {};
