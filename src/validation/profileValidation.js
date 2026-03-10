@@ -14,8 +14,8 @@ const customLinkSchema = Joi.object({
   name:    Joi.string().trim().allow("").default(""),
   url:     Joi.string().trim().allow("").default(""),
   visible: Joi.boolean().default(true),
+  order:   Joi.number().default(0),
 });
-
 const themeSchema = Joi.object({
   title: Joi.string().allow(""),
   description: Joi.string().allow(""),

@@ -18,10 +18,10 @@ const CustomLinkSchema = new mongoose.Schema(
     name:    { type: String, default: "" },
     url:     { type: String, default: "" },
     visible: { type: Boolean, default: true },
+    order:   { type: Number, default: 0 },
   },
   { _id: false }
 );
-
 const ThemeSchema = new mongoose.Schema(
   {
     title: { type: String, default: "" },
@@ -102,6 +102,11 @@ const ProfileSchema = new mongoose.Schema(
     // ✅ NUEVO: enlaces personalizados del usuario
     customLinks: { type: [CustomLinkSchema], default: [] },
     meta: { type: Map, of: mongoose.Schema.Types.Mixed },
+    // Agregar antes del cierre del ProfileSchema
+stats: {
+  views:  { type: Number, default: 0 },
+  clicks: { type: Map, of: Number, default: () => ({}) },
+},
   },
   { timestamps: true }
 );

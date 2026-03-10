@@ -8,6 +8,7 @@ const { connectDb } = require('./utils/db');
 const profileRoutes = require('./routes/profileRoutes');
 const authRoutes = require('./routes/authRoutes'); // 👈 añade esto
 const { notFound, errorHandler } = require('./utils/errorHandler');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);       // 👈 monta auth primero si quieres
 app.use('/api/profiles', profileRoutes);
 
+app.use('/api/analytics', analyticsRoutes);     
 app.use(notFound);
 app.use(errorHandler);
 
