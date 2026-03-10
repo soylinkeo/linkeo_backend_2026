@@ -18,8 +18,9 @@ function mapToObj(m) {
 ================================================================ */
 async function track(req, res, next) {
   try {
-    const { slug, type, linkKey = "" } = req.body || {};
-    if (!slug || !type) return res.json({ ok: true });
+  const { slug, type, linkKey = "", linkName = "" } = req.body || {};
+     console.log("TRACK:", { slug, type, linkKey, linkName }); // ← agrega esto
+  if (!slug || !type) return res.json({ ok: true });
 
     const profile = await Profile.findOne({ slug }).select("_id").lean();
     if (!profile) return res.json({ ok: true });
@@ -35,13 +36,18 @@ async function track(req, res, next) {
       );
     }
 
-    if (type === "link_click" && linkKey) {
-      await AnalyticsDayStat.findOneAndUpdate(
-        filter,
-        { $inc: { [`clicks.${linkKey}`]: 1 }, $setOnInsert: { slug } },
-        { upsert: true, new: true }
-      );
-    }
+   // En track(), reemplaza el bloque link_click:
+if (type === "link_click" && linkKey) {
+  await AnalyticsDayStat.findOneAndUpdate(
+    filter,
+    { 
+      $inc: { [`clicks.${linkKey}`]: 1 },
+      $set: { [`clickNames.${linkKey}`]: linkName || linkKey },
+      $setOnInsert: { slug }
+    },
+    { upsert: true, new: true }
+  );
+}
 
     res.json({ ok: true });
   } catch (err) {
@@ -85,7 +91,15 @@ async function getMyStats(req, res, next) {
       }
     }
 
-    res.json({ views, totalClicks, clicks, daily });
+   const clickNames = {};
+for (const doc of docs) {
+  const docNames = mapToObj(doc.clickNames);
+  for (const [k, v] of Object.entries(docNames)) {
+    if (!clickNames[k]) clickNames[k] = v;
+  }
+}
+
+res.json({ views, totalClicks, clicks, clickNames, daily });
   } catch (err) {
     next(err);
   }
