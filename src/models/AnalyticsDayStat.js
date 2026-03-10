@@ -8,6 +8,7 @@ const AnalyticsDayStatSchema = new mongoose.Schema(
     date:      { type: String, required: true }, // "2026-03-10"
     views:     { type: Number, default: 0 },
     clicks:    { type: Map, of: Number, default: () => ({}) }, // { whatsapp: 4, phone: 1 }
+    clickNames: { type: Map, of: String, default: () => ({}) },
   },
   { timestamps: true }
 );
