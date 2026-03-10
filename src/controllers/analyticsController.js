@@ -42,11 +42,17 @@ if (type === "link_click" && linkKey) {
     filter,
     { 
       $inc: { [`clicks.${linkKey}`]: 1 },
-      $set: { [`clickNames.${linkKey}`]: linkName || linkKey },
       $setOnInsert: { slug }
     },
     { upsert: true, new: true }
   );
+  // Guardar nombre por separado para evitar conflicto con upsert
+  if (linkName) {
+    await AnalyticsDayStat.updateOne(
+      filter,
+      { $set: { [`clickNames.${linkKey}`]: linkName } }
+    );
+  }
 }
 
     res.json({ ok: true });
