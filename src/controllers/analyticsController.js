@@ -1,6 +1,11 @@
 // src/controllers/analyticsController.js
-const Profile        = require("../models/Profile");
-const AnalyticsEvent = require("../models/AnalyticsEvent");
+const Profile         = require("../models/Profile");
+const AnalyticsDayStat = require("../models/AnalyticsDayStat");
+
+// Fecha actual en UTC: "2026-03-10"
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 /* ================================================================
    POST /api/analytics/track
@@ -12,17 +17,27 @@ async function track(req, res, next) {
     const { slug, type, linkKey = "" } = req.body || {};
     if (!slug || !type) return res.json({ ok: true });
 
-    // Buscar el perfil por slug
     const profile = await Profile.findOne({ slug }).select("_id").lean();
     if (!profile) return res.json({ ok: true });
 
-    // Guardar evento individual (permite filtrar por día/semana/mes)
-    await AnalyticsEvent.create({
-      profileId: profile._id,
-      slug,
-      type,
-      linkKey: type === "link_click" ? linkKey : "",
-    });
+    const date = today();
+    const filter = { profileId: profile._id, date };
+
+    if (type === "profile_view") {
+      await AnalyticsDayStat.findOneAndUpdate(
+        filter,
+        { $inc: { views: 1 }, $setOnInsert: { slug } },
+        { upsert: true }
+      );
+    }
+
+    if (type === "link_click" && linkKey) {
+      await AnalyticsDayStat.findOneAndUpdate(
+        filter,
+        { $inc: { [`clicks.${linkKey}`]: 1 }, $setOnInsert: { slug } },
+        { upsert: true }
+      );
+    }
 
     res.json({ ok: true });
   } catch (err) {
@@ -40,33 +55,33 @@ async function getMyStats(req, res, next) {
     const days   = Math.min(parseInt(req.query.days) || 30, 365);
 
     const profile = await Profile.findOne({ user: userId }).select("_id").lean();
-    if (!profile) return res.json({ views: 0, totalClicks: 0, clicks: {}, daily: [] });
+    if (!profile) return res.json({ views: 0, totalClicks: 0, clicks: {}, daily: {} });
 
+    // Fecha de inicio
     const since = new Date();
-    since.setDate(since.getDate() - days);
+    since.setDate(since.getDate() - (days - 1));
+    const sinceStr = since.toISOString().slice(0, 10);
 
-    const events = await AnalyticsEvent.find({
+    const docs = await AnalyticsDayStat.find({
       profileId: profile._id,
-      createdAt: { $gte: since },
-    }).select("type linkKey createdAt").lean();
+      date: { $gte: sinceStr },
+    }).lean();
 
     // Totales
-    const views       = events.filter(e => e.type === "profile_view").length;
-    const clickEvents = events.filter(e => e.type === "link_click");
-    const totalClicks = clickEvents.length;
+    let views       = 0;
+    let totalClicks = 0;
+    const clicks    = {};
+    const daily     = {}; // { "2026-03-10": 5 }
 
-    // Clicks por plataforma: { whatsapp: 5, instagram: 3 }
-    const clicks = {};
-    for (const e of clickEvents) {
-      const k = e.linkKey || "custom";
-      clicks[k] = (clicks[k] || 0) + 1;
-    }
+    for (const doc of docs) {
+      views += doc.views || 0;
+      daily[doc.date] = (daily[doc.date] || 0) + (doc.views || 0);
 
-    // Visitas por día
-    const daily = {};
-    for (const e of events.filter(ev => ev.type === "profile_view")) {
-      const day = e.createdAt.toISOString().slice(0, 10); // "2026-03-10"
-      daily[day] = (daily[day] || 0) + 1;
+      const docClicks = Object.fromEntries(doc.clicks || []);
+      for (const [k, v] of Object.entries(docClicks)) {
+        clicks[k]    = (clicks[k] || 0) + v;
+        totalClicks += v;
+      }
     }
 
     res.json({ views, totalClicks, clicks, daily });
