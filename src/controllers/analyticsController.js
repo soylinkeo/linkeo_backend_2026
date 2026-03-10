@@ -2,7 +2,9 @@
 const Profile = require("../models/Profile");
 
 /* ================================================================
-   POST /api/analytics/track  — público, lo llama PublicProfile.jsx
+   POST /api/analytics/track
+   Body: { slug, type, linkKey }
+   Público — lo llama PublicProfile.jsx sin token
 ================================================================ */
 async function track(req, res, next) {
   try {
@@ -17,6 +19,7 @@ async function track(req, res, next) {
     }
 
     if (type === "link_click" && linkKey) {
+      // linkKey es simple: "whatsapp", "instagram", "custom", "vcard", etc.
       await Profile.findOneAndUpdate(
         { slug },
         { $inc: { [`stats.clicks.${linkKey}`]: 1 } }
@@ -30,7 +33,8 @@ async function track(req, res, next) {
 }
 
 /* ================================================================
-   GET /api/analytics/me  — privado
+   GET /api/analytics/me
+   Privado — devuelve stats del usuario autenticado
 ================================================================ */
 async function getMyStats(req, res, next) {
   try {
@@ -41,14 +45,13 @@ async function getMyStats(req, res, next) {
 
     if (!profile) return res.json({ views: 0, totalClicks: 0, clicks: {} });
 
-    // Map → objeto plano
     const clicks = Object.fromEntries(profile.stats?.clicks || []);
     const totalClicks = Object.values(clicks).reduce((a, b) => a + b, 0);
 
     res.json({
       views: profile.stats?.views || 0,
       totalClicks,
-      clicks, // { whatsapp: 5, instagram: 3, website: 4 }
+      clicks, // { whatsapp: 5, instagram: 3 }
     });
   } catch (err) {
     next(err);
