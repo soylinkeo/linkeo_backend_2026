@@ -3,7 +3,7 @@ const Profile          = require("../models/Profile");
 const AnalyticsDayStat = require("../models/AnalyticsDayStat");
 
 function today() {
-  return new Date().toISOString().slice(0, 10); // "2026-03-10"
+  return new Date().toISOString().slice(0, 10);
 }
 
 function mapToObj(m) {
@@ -18,9 +18,8 @@ function mapToObj(m) {
 ================================================================ */
 async function track(req, res, next) {
   try {
-  const { slug, type, linkKey = "", linkName = "" } = req.body || {};
-     console.log("TRACK:", { slug, type, linkKey, linkName }); // ← agrega esto
-  if (!slug || !type) return res.json({ ok: true });
+    const { slug, type, linkKey = "", linkName = "" } = req.body || {};
+    if (!slug || !type) return res.json({ ok: true });
 
     const profile = await Profile.findOne({ slug }).select("_id").lean();
     if (!profile) return res.json({ ok: true });
@@ -36,24 +35,19 @@ async function track(req, res, next) {
       );
     }
 
-   // En track(), reemplaza el bloque link_click:
-if (type === "link_click" && linkKey) {
-  await AnalyticsDayStat.findOneAndUpdate(
-    filter,
-    { 
-      $inc: { [`clicks.${linkKey}`]: 1 },
-      $setOnInsert: { slug }
-    },
-    { upsert: true, new: true }
-  );
-  // Guardar nombre por separado para evitar conflicto con upsert
-  if (linkName) {
-    await AnalyticsDayStat.updateOne(
-      filter,
-      { $set: { [`clickNames.${linkKey}`]: linkName } }
-    );
-  }
-}
+    if (type === "link_click" && linkKey) {
+      await AnalyticsDayStat.findOneAndUpdate(
+        filter,
+        { $inc: { [`clicks.${linkKey}`]: 1 }, $setOnInsert: { slug } },
+        { upsert: true, new: true }
+      );
+      if (linkName) {
+        await AnalyticsDayStat.updateOne(
+          filter,
+          { $set: { [`clickNames.${linkKey}`]: linkName } }
+        );
+      }
+    }
 
     res.json({ ok: true });
   } catch (err) {
@@ -70,7 +64,7 @@ async function getMyStats(req, res, next) {
     const days   = Math.min(parseInt(req.query.days) || 30, 365);
 
     const profile = await Profile.findOne({ user: userId }).select("_id").lean();
-    if (!profile) return res.json({ views: 0, totalClicks: 0, clicks: {}, daily: {} });
+    if (!profile) return res.json({ views: 0, totalClicks: 0, clicks: {}, clickNames: {}, daily: {}, dailyClicks: {} });
 
     const since = new Date();
     since.setDate(since.getDate() - (days - 1));
@@ -83,29 +77,36 @@ async function getMyStats(req, res, next) {
 
     let views       = 0;
     let totalClicks = 0;
-    const clicks    = {};
-    const daily     = {};
+    const clicks      = {};
+    const daily       = {};
+    const clickNames  = {};
+    const dailyClicks = {};
 
     for (const doc of docs) {
+      // Visitas
       views += doc.views || 0;
       daily[doc.date] = (daily[doc.date] || 0) + (doc.views || 0);
 
+      // Clicks totales
       const docClicks = mapToObj(doc.clicks);
       for (const [k, v] of Object.entries(docClicks)) {
         clicks[k]    = (clicks[k] || 0) + Number(v);
         totalClicks += Number(v);
       }
+
+      // Clicks por día
+      if (Object.keys(docClicks).length > 0) {
+        dailyClicks[doc.date] = docClicks;
+      }
+
+      // Nombres de enlaces
+      const docNames = mapToObj(doc.clickNames);
+      for (const [k, v] of Object.entries(docNames)) {
+        if (!clickNames[k]) clickNames[k] = v;
+      }
     }
 
-   const clickNames = {};
-for (const doc of docs) {
-  const docNames = mapToObj(doc.clickNames);
-  for (const [k, v] of Object.entries(docNames)) {
-    if (!clickNames[k]) clickNames[k] = v;
-  }
-}
-
-res.json({ views, totalClicks, clicks, clickNames, daily });
+    res.json({ views, totalClicks, clicks, clickNames, daily, dailyClicks });
   } catch (err) {
     next(err);
   }
